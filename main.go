@@ -1,11 +1,21 @@
 package main
 
 import (
-	"flag"
+	"github.com/gocms-io/gcm/commands/install"
+	cli "github.com/urfave/cli"
+	"os"
 )
 
 func main() {
+	app := cli.NewApp()
+	app.EnableBashCompletion = true
+	app.Name = "GoCMS Manager (gcm)"
+	app.Usage = "Interface to manage all things GoCMS"
+	app.HelpName = "gcm"
+	app.Version = "0.0.1"
+	app.Commands = []cli.Command{
+		install.CMD_INSTALL,
+	}
 
-	branch := flag.Int("port", 30001, "port to run on.")
-	flag.Parse()
+	app.Run(os.Args)
 }
