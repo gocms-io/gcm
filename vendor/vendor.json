@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "Tipr3dANe0pr5OCGxipM7sqcBJk=",
+			"path": "github.com/cavaliercoder/grab",
+			"revision": "3fe166241c3e85d7f1ea4683d2ad2bc486395b3f",
+			"revisionTime": "2017-06-07T12:37:17Z"
+		},
+		{
 			"checksumSHA1": "aTYPm16eYDQhbVLgreCGwvV2klw=",
 			"path": "github.com/chzyer/readline",
 			"revision": "41eea22f717c616615e1e59aa06cf831f9901f35",

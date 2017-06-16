@@ -1,33 +1,41 @@
 package utility
 
 import (
-	"os"
-	"net/http"
-	"io"
+	"github.com/cavaliercoder/grab"
+	"fmt"
+	"time"
 )
 
-func DownloadFile(filepath string, url string) (err error) {
+func DownloadFile(filepath string, downloadUrl string) (err error) {
 
-	// Create the file
-	out, err := os.Create(filepath)
-	if err != nil  {
-		return err
+	client := grab.NewClient()
+	req, _ := grab.NewRequest(filepath, downloadUrl)
+
+	resp := client.Do(req)
+
+
+	// start Progress loop
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+
+Loop:
+	for {
+		select {
+		case <-t.C:
+			fmt.Printf("	transferred %v /%v bytes (%.2f%%)\n",
+				resp.BytesComplete(),
+				resp.Size,
+				100*resp.Progress())
+
+		case <-resp.Done:
+			break Loop
+		}
 	}
-	defer out.Close()
 
-	// Get the data
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Writer the body to file
-	_, err = io.Copy(out, resp.Body)
-	if err != nil  {
+	// check errors
+	if err := resp.Err(); err != nil {
 		return err
 	}
 
 	return nil
 }
-

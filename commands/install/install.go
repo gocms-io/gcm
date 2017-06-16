@@ -7,6 +7,7 @@ import (
 	"github.com/urfave/cli"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 var CMD_INSTALL = cli.Command{
@@ -23,21 +24,32 @@ func cmd_install(c *cli.Context) error {
 		return nil
 	}
 
-	// clean destination file path
-	// todo make os agnostic
-	downloadLocation := fmt.Sprintf("%v/%v", path.Clean(c.Args().First()), config.BINARY_NAME)
-
+	// download file
+	downloadPath := path.Clean(c.Args().First())
+	downloadLocation := fmt.Sprintf("%v/%v", downloadPath, config.BINARY_NAME)
+	downloadLocation = filepath.FromSlash(downloadLocation)
 	urlLocation := fmt.Sprintf("%v://%v.%v/%v/%v/%v/%v", config.BINARY_PROTOCOL, config.BINARY_HOST, config.BINARY_DOMAIN, config.BINARY_DEFAULT_RELEASE, config.BINARY_DEFAULT_VERSION, config.BINARY_OS_PATH, config.BINARY_NAME)
-	fmt.Println("Downloading: ", urlLocation)
+	fmt.Printf("Downloading: %v...\n", urlLocation)
 	err := utility.DownloadFile(downloadLocation, urlLocation)
-
 	if err != nil {
 		fmt.Printf("Error downloading GoCMS package: %v\n", err.Error())
-		os.Remove(downloadLocation)
+		_ = os.Remove(downloadLocation)
 		return nil
 	}
 
-	fmt.Println("GoCMS Installed Successfully")
+	// unzip file
+	fmt.Printf("Unpacking %v to %v\n", downloadLocation, downloadPath)
+	err = utility.Unzip(downloadLocation, downloadPath)
+	if err != nil {
+		fmt.Printf("Error unpacking GoCMS package: %v\n", err.Error())
+		_ = os.Remove(downloadLocation)
+		return nil
+	}
+
+	// clean up zip file
+	_ = os.Remove(downloadLocation)
+
+	fmt.Println("GoCMS Installed Successfully!")
 
 	return nil
 }
