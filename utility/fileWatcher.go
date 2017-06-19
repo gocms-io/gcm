@@ -113,7 +113,7 @@ func watch(c *WatchFileContext) {
 			if err != nil {
 				log.Fatal(err)
 			} else {
-				fmt.Printf("Watching %v\n", path)
+				//fmt.Printf("Watching %v\n", path)
 			}
 		}
 
