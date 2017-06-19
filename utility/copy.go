@@ -21,7 +21,7 @@ func Copy(source string, dest string, hardCopy bool) error {
 		return err
 	}
 
-	// if source is a directory then start the copy
+	// if source is a directory start copy
 	if srcInfo.IsDir() {
 		return copyDir(source, dest, hardCopy)
 	}
@@ -31,7 +31,7 @@ func Copy(source string, dest string, hardCopy bool) error {
 	if err != nil {
 		return err
 	}
-	// if we are trying to copy a file into a directory
+	// if we are trying to copy a file into a directory - fix it
 	if dest[len(dest)-1:] == fmt.Sprintf("%c", os.PathSeparator) {
 		dest = filepath.Join(dest, srcInfo.Name())
 	}
@@ -45,15 +45,24 @@ func copyDir(source string, dest string, hardCopy bool) error {
 		Destination: dest,
 	}
 
+	// if we are trying to copy a directory into a file - fix it
+	if dest[len(dest)-1:] != fmt.Sprintf("%c", os.PathSeparator) {
+		dest = dest + fmt.Sprintf("%c", os.PathSeparator)
+		cc.Destination = dest
+	}
+
 	// if we are doing a hard copy we must delete the dest contents first
 	if hardCopy {
 		_ = os.RemoveAll(cc.Destination)
 	}
 
 	// create if doesn't exist
-	_ = os.MkdirAll(cc.Destination, os.ModePerm)
+	err := os.MkdirAll(cc.Destination, os.ModePerm)
+	if err != nil {
+		return err
+	}
 
-	err := filepath.Walk(cc.Source, cc.copyDirWalk)
+	err = filepath.Walk(cc.Source, cc.copyDirWalk)
 	if err != nil {
 		return err
 	}
