@@ -11,9 +11,15 @@ import (
 type CopyContext struct {
 	Source      string
 	Destination string
+	Verbose     bool
 }
 
-func Copy(source string, dest string, hardCopy bool) error {
+func Copy(source string, dest string, hardCopy bool, verbose bool) error {
+	// clean
+	source = filepath.Clean(source)
+	dest = filepath.Clean(dest)
+
+	fmt.Printf("Starting to Copy: %v to %v\n", source, dest)
 
 	// check source
 	srcInfo, err := os.Stat(source)
@@ -23,7 +29,7 @@ func Copy(source string, dest string, hardCopy bool) error {
 
 	// if source is a directory start copy
 	if srcInfo.IsDir() {
-		return copyDir(source, dest, hardCopy)
+		return copyDir(source, dest, hardCopy, verbose)
 	}
 
 	// get path to make if needed
@@ -31,24 +37,22 @@ func Copy(source string, dest string, hardCopy bool) error {
 	if err != nil {
 		return err
 	}
-	// if we are trying to copy a file into a directory - fix it
-	if dest[len(dest)-1:] == fmt.Sprintf("%c", os.PathSeparator) {
-		dest = filepath.Join(dest, srcInfo.Name())
-	}
-	return copyFile(source, dest)
+
+	return copyFile(source, dest, verbose)
 }
 
-func copyDir(source string, dest string, hardCopy bool) error {
+func copyDir(source string, dest string, hardCopy bool, verbose bool) error {
 
 	cc := CopyContext{
 		Source:      source,
 		Destination: dest,
+		Verbose:     verbose,
 	}
 
 	// if we are trying to copy a directory into a file - fix it
-	if dest[len(dest)-1:] != fmt.Sprintf("%c", os.PathSeparator) {
-		dest = dest + fmt.Sprintf("%c", os.PathSeparator)
-		cc.Destination = dest
+	if cc.Destination[len(cc.Destination[len(cc.Destination[len(dest)-1:])-1:])-1:] != fmt.Sprintf("%c", os.PathSeparator) {
+		cc.Destination = cc.Destination + fmt.Sprintf("%c", os.PathSeparator)
+		cc.Destination = filepath.Clean(cc.Destination)
 	}
 
 	// if we are doing a hard copy we must delete the dest contents first
@@ -72,7 +76,6 @@ func copyDir(source string, dest string, hardCopy bool) error {
 
 func (cc *CopyContext) copyDirWalk(src string, info os.FileInfo, err error) error {
 	dst := strings.Replace(src, cc.Source, cc.Destination, 1)
-
 	if err != nil {
 		return err
 	}
@@ -87,11 +90,11 @@ func (cc *CopyContext) copyDirWalk(src string, info os.FileInfo, err error) erro
 	}
 
 	// otherwise copy file
-	return copyFile(src, dst)
+	return copyFile(src, dst, cc.Verbose)
 
 }
 
-func copyFile(src, dst string) error {
+func copyFile(src, dst string, verbose bool) error {
 
 	sfi, err := os.Stat(src)
 	if err != nil {
@@ -111,7 +114,9 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	fmt.Printf("Copied %v\n", src)
+	if verbose {
+		fmt.Printf("Copied %v to %v\n", src, dst)
+	}
 	return nil
 }
 

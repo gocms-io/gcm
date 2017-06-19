@@ -9,6 +9,7 @@ import (
 )
 
 type WatchFileContext struct {
+	Verbose         bool
 	SourceBase      string
 	DestinationBase string
 	Chmod           func(c *WatchFileContext, eventPath string)
@@ -18,8 +19,9 @@ type WatchFileContext struct {
 	Write           func(c *WatchFileContext, eventPath string)
 }
 
-func WatchFilesForCarbonCopy(src string, dest string) {
+func WatchFilesForCarbonCopy(src string, dest string, verbose bool) {
 	wf := WatchFileContext{
+		Verbose:         verbose,
 		SourceBase:      src,
 		DestinationBase: dest,
 		Rename:          deleteDestination,
@@ -61,11 +63,9 @@ func copySourceToDestination(c *WatchFileContext, eventPath string) {
 
 	// get dest
 	dest := filepath.Join(c.DestinationBase, relPath)
-	err = Copy(eventPath, dest, true)
+	err = Copy(eventPath, dest, true, c.Verbose)
 	if err != nil {
 		fmt.Printf("Error copying %v: %v\n", eventPath, err.Error())
-	} else {
-		fmt.Printf("Copied %v\n", eventPath)
 	}
 }
 
