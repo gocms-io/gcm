@@ -83,7 +83,7 @@ func cmd_update(c *cli.Context) error {
 	// themes
 	_ = fph.BackupToWorking(filepath.Join(config.CONTENT_DIR, config.THEMES_DIR))
 	// remove default theme and add new
-	
+
 	_ = os.Remove(fph.AddWorkingDirPath(filepath.Join(config.CONTENT_DIR, config.THEMES_DIR, config.THEMES_DEFAULT_DIR)))
 	_ = fph.StagingToWorking(filepath.Join(config.CONTENT_DIR, config.THEMES_DIR, config.THEMES_DEFAULT_DIR))
 	fmt.Print("complete!\n")
