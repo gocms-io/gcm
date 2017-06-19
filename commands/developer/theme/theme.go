@@ -6,17 +6,24 @@ import (
 	"github.com/urfave/cli"
 )
 
-const flag_hard = "hard"
+const flag_hard = "delete"
+const flag_hard_short = "d"
+const flag_watch = "watch"
+const flag_watch_short = "w"
 
 var CMD_THEME = cli.Command{
 	Name:      "theme",
 	Usage:     "copy theme files from development directory into the gocms themes directory",
 	ArgsUsage: "<source> <destination>",
 	Action:    cmd_copy_theme,
-	Flags: []cli.Flag {
+	Flags: []cli.Flag{
 		cli.BoolFlag{
-			Name: flag_hard,
+			Name:  flag_hard + ", " + flag_hard_short,
 			Usage: "Delete the existing destination and replace with the contents of the source.",
+		},
+		cli.BoolFlag{
+			Name:  flag_watch + ", " + flag_watch_short,
+			Usage: "Watch for file changes in source and copy to destination on change.",
 		},
 	},
 }
@@ -40,6 +47,11 @@ func cmd_copy_theme(c *cli.Context) error {
 	if err != nil {
 		fmt.Printf("Error copying theme dir: %v\n", err.Error())
 		return nil
+	}
+
+	if c.Bool(flag_watch) {
+		fmt.Println("Watching source directory for changes...")
+		utility.WatchFilesForCarbonCopy(srcDir, destDir)
 	}
 
 	return nil

@@ -98,20 +98,9 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	dfi, err := os.Stat(dst)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil
-		}
-	}
-
-	// if same file we are done
-	if os.SameFile(sfi, dfi) {
-		return nil
-	}
-
 	// copy file contents
 	err = copyFileContents(src, dst)
+
 	if err != nil {
 		return err
 	}
