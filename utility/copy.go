@@ -19,7 +19,7 @@ func Copy(source string, dest string, hardCopy bool, verbose bool) error {
 	source = filepath.Clean(source)
 	dest = filepath.Clean(dest)
 
-	fmt.Printf("Starting to Copy: %v to %v\n", source, dest)
+	fmt.Printf("Starting to Copy: %v to %v...", source, dest)
 
 	// check source
 	srcInfo, err := os.Stat(source)
@@ -29,16 +29,32 @@ func Copy(source string, dest string, hardCopy bool, verbose bool) error {
 
 	// if source is a directory start copy
 	if srcInfo.IsDir() {
-		return copyDir(source, dest, hardCopy, verbose)
+		err = copyDir(source, dest, hardCopy, verbose)
+		if err != nil {
+			fmt.Printf(" failed!\nerror: %v\n", err.Error())
+			return err
+		}
+
+		fmt.Printf(" done.\n")
+		return nil
 	}
 
 	// get path to make if needed
 	err = os.MkdirAll(filepath.Dir(dest), os.ModePerm)
 	if err != nil {
+		fmt.Printf(" failed!\nerror: %v\n", err.Error())
 		return err
 	}
 
-	return copyFile(source, dest, verbose)
+	err = copyFile(source, dest, verbose)
+	if err != nil {
+		fmt.Printf(" failed!\nerror: %v\n", err.Error())
+		return err
+	}
+
+	fmt.Printf(" done.\n")
+
+	return nil
 }
 
 func copyDir(source string, dest string, hardCopy bool, verbose bool) error {

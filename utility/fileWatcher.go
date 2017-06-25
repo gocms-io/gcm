@@ -12,6 +12,7 @@ type WatchFileContext struct {
 	Verbose         bool
 	SourceBase      string
 	DestinationBase string
+	IgnorePaths     []string
 	Chmod           func(c *WatchFileContext, eventPath string)
 	Removed         func(c *WatchFileContext, eventPath string)
 	Create          func(c *WatchFileContext, eventPath string)
@@ -19,11 +20,12 @@ type WatchFileContext struct {
 	Write           func(c *WatchFileContext, eventPath string)
 }
 
-func WatchFilesForCarbonCopy(src string, dest string, verbose bool) {
+func WatchFilesForCarbonCopy(src string, dest string, ignore []string, verbose bool) {
 	wf := WatchFileContext{
 		Verbose:         verbose,
 		SourceBase:      src,
 		DestinationBase: dest,
+		IgnorePaths:     ignore,
 		Rename:          deleteDestination,
 		Removed:         deleteDestination,
 		Create:          copySourceToDestination,
@@ -31,7 +33,7 @@ func WatchFilesForCarbonCopy(src string, dest string, verbose bool) {
 		Chmod:           ignoreDestination,
 	}
 
-	watch(&wf)
+	wf.Watch()
 
 }
 
@@ -69,7 +71,7 @@ func copySourceToDestination(c *WatchFileContext, eventPath string) {
 	}
 }
 
-func watch(c *WatchFileContext) {
+func (c *WatchFileContext) Watch() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
@@ -103,6 +105,24 @@ func watch(c *WatchFileContext) {
 
 	// get all paths under path
 	err = filepath.Walk(c.SourceBase, func(path string, info os.FileInfo, err error) error {
+
+		// check ignore
+		for _, ignorePath := range c.IgnorePaths {
+			cleanIgnorePath := filepath.Clean(ignorePath)
+			cleanPath := filepath.Clean(path)
+			//fmt.Printf("Compare IP: %v, %v\n", cleanIgnorePath, cleanPath)
+			// ignore files
+			if cleanIgnorePath == cleanPath {
+				if c.Verbose {
+					fmt.Printf("ignoring: %v\n", cleanIgnorePath)
+				}
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// ignore directories
+		}
 
 		if err != nil {
 			return err

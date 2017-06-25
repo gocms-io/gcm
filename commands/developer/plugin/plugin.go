@@ -70,7 +70,6 @@ var CMD_PLUGIN = cli.Command{
 }
 
 func cmd_copy_plugin(c *cli.Context) error {
-
 	entryPoint := "main.go"
 	// verify there is a source and destination
 	if !c.Args().Present() {
@@ -87,6 +86,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 	binaryName := pluginName
 	goCMSDevMode := false
 	runGoCMS := false
+	watch := false
 
 	srcDir := c.Args().Get(0)
 	destDir := c.Args().Get(1)
@@ -114,6 +114,11 @@ func cmd_copy_plugin(c *cli.Context) error {
 	// run
 	if c.Bool(flag_run_gocms) {
 		runGoCMS = true
+	}
+
+	// watch
+	if c.Bool(flag_watch) {
+		watch = true
 	}
 
 	var filesToCopy []string
@@ -157,6 +162,40 @@ func cmd_copy_plugin(c *cli.Context) error {
 		filesToCopy = append(filesToCopy, c.StringSlice(flag_dir_file_to_copy)...)
 	}
 
+	done := make(chan bool)
+
+	copyPluginFiles(filesToCopy, pluginPath, srcDir, c.GlobalBool(config.FLAG_VERBOSE))
+
+	if watch {
+		wfc := utility.WatchFileContext{
+			Verbose:     c.GlobalBool(config.FLAG_VERBOSE),
+			SourceBase:  srcDir,
+			IgnorePaths: []string{"vendor", ".git", "docs"},
+			Chmod:       buildCopyAndRun,
+			Removed:     buildCopyAndRun,
+			Create:      buildCopyAndRun,
+			Rename:      buildCopyAndRun,
+			Write:       buildCopyAndRun,
+		}
+
+		wfc.Watch()
+	}
+
+	if runGoCMS {
+
+		fmt.Printf("Running GoCMS\n")
+		utility.StartGoCMS(destDir, goCMSDevMode)
+		<-done
+	}
+
+	return nil
+}
+
+func buildCopyAndRun(c *utility.WatchFileContext, eventPath string) {
+	fmt.Printf("buildCopyAndRun called by file: %v\n", eventPath)
+}
+
+func copyPluginFiles(filesToCopy []string, pluginPath string, srcDir string, verbose bool) {
 	// copy files to plugin
 	for _, file := range filesToCopy {
 
@@ -166,17 +205,16 @@ func cmd_copy_plugin(c *cli.Context) error {
 			break
 		}
 
-		destFile := strings.Replace(file, srcDir, "", 1)
-		err = utility.Copy(file, filepath.Join(pluginPath, destFile), true, c.GlobalBool(config.FLAG_VERBOSE))
+		destFile := file
+
+		// strip leading path if it isn't just a file
+		if filepath.Base(file) != file {
+			destFile = strings.Replace(file, srcDir, "", 1)
+		}
+		destFilePath := filepath.Join(pluginPath, destFile)
+		err := utility.Copy(file, destFilePath, true, verbose)
 		if err != nil {
 			fmt.Printf("Error copying %v: %v\n", file, err.Error())
-			return nil
-		}
-
-		if runGoCMS {
-			utility.StartGoCMS(destDir, goCMSDevMode)
 		}
 	}
-
-	return nil
 }

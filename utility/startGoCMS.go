@@ -10,7 +10,6 @@ import (
 
 // start goCMS
 func StartGoCMS(destDir string, goCMSDevMode bool) {
-	done := make(chan bool)
 
 	// change directory into gocms dir and run from that context
 	err := os.Chdir(destDir)
@@ -63,6 +62,4 @@ func StartGoCMS(destDir string, goCMSDevMode bool) {
 		fmt.Printf("Error starting gocms: %v\n", err.Error())
 		os.Exit(0)
 	}
-
-	<-done
 }
