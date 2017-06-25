@@ -25,8 +25,8 @@ const flag_dir_file_to_copy = "copy"
 const flag_dir_file_to_copy_short = "c"
 const flag_run_gocms = "run"
 const flag_run_gocms_short = "r"
-const flag_gocms_dev_bin = "gocms"
-const flag_gocms_dev_bin_short = "g"
+const flag_gocms_dev_mode = "gocms"
+const flag_gocms_dev_mode_short = "g"
 
 var CMD_PLUGIN = cli.Command{
 	Name:      "plugin",
@@ -62,9 +62,9 @@ var CMD_PLUGIN = cli.Command{
 			Name:  flag_run_gocms + ", " + flag_run_gocms_short,
 			Usage: "Run gocms after plugin is compiled and copied.",
 		},
-		cli.StringFlag{
-			Name:  flag_gocms_dev_bin + ", " + flag_gocms_dev_bin_short,
-			Usage: "This option is intended for use only during gocms development. It is used to run gocms from a non-default binary. Ex: run main.go",
+		cli.BoolFlag{
+			Name:  flag_gocms_dev_mode + ", " + flag_gocms_dev_mode_short,
+			Usage: "This option is intended for use only during gocms development. It is used to compile and run gocms from the specified destination directory.",
 		},
 	},
 }
@@ -85,7 +85,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 	}
 	pluginName := c.String(plugin_name)
 	binaryName := pluginName
-	gocmsBinaryCommand := config.BINARY_FILE
+	goCMSDevMode := false
 	runGoCMS := false
 
 	srcDir := c.Args().Get(0)
@@ -106,9 +106,9 @@ func cmd_copy_plugin(c *cli.Context) error {
 		entryPoint = c.String(flag_entry)
 	}
 
-	// dev bin
-	if c.String(flag_gocms_dev_bin) != "" {
-		gocmsBinaryCommand = c.String(flag_gocms_dev_bin)
+	// dev mode
+	if c.Bool(flag_gocms_dev_mode) {
+		goCMSDevMode = true
 	}
 
 	// run
@@ -174,7 +174,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 		}
 
 		if runGoCMS {
-			utility.StartGoCMS(destDir, gocmsBinaryCommand)
+			utility.StartGoCMS(destDir, goCMSDevMode)
 		}
 	}
 
