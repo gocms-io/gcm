@@ -23,6 +23,10 @@ const flag_entry = "entry"
 const flag_entry_short = "e"
 const flag_dir_file_to_copy = "copy"
 const flag_dir_file_to_copy_short = "c"
+const flag_run_gocms = "run"
+const flag_run_gocms_short = "r"
+const flag_gocms_dev_bin = "gocms"
+const flag_gocms_dev_bin_short = "g"
 
 var CMD_PLUGIN = cli.Command{
 	Name:      "plugin",
@@ -54,6 +58,14 @@ var CMD_PLUGIN = cli.Command{
 			Name:  flag_dir_file_to_copy + ", " + flag_dir_file_to_copy_short,
 			Usage: "Directory or file to copy with plugin. Accepts multiple instances of the flag.",
 		},
+		cli.BoolFlag{
+			Name:  flag_run_gocms + ", " + flag_run_gocms_short,
+			Usage: "Run gocms after plugin is compiled and copied.",
+		},
+		cli.StringFlag{
+			Name:  flag_gocms_dev_bin + ", " + flag_gocms_dev_bin_short,
+			Usage: "This option is intended for use only during gocms development. It is used to run gocms from a non-default binary. Ex: run main.go",
+		},
 	},
 }
 
@@ -73,6 +85,8 @@ func cmd_copy_plugin(c *cli.Context) error {
 	}
 	pluginName := c.String(plugin_name)
 	binaryName := pluginName
+	gocmsBinaryCommand := config.BINARY_FILE
+	runGoCMS := false
 
 	srcDir := c.Args().Get(0)
 	destDir := c.Args().Get(1)
@@ -82,12 +96,24 @@ func cmd_copy_plugin(c *cli.Context) error {
 		return nil
 	}
 
+	// binary
 	if c.String(flag_binary) != "" {
 		binaryName = c.String(flag_binary)
 	}
 
+	// entry
 	if c.String(flag_entry) != "" {
 		entryPoint = c.String(flag_entry)
+	}
+
+	// dev bin
+	if c.String(flag_gocms_dev_bin) != "" {
+		gocmsBinaryCommand = c.String(flag_gocms_dev_bin)
+	}
+
+	// run
+	if c.Bool(flag_run_gocms) {
+		runGoCMS = true
 	}
 
 	var filesToCopy []string
@@ -133,11 +159,22 @@ func cmd_copy_plugin(c *cli.Context) error {
 
 	// copy files to plugin
 	for _, file := range filesToCopy {
+
+		// if file doesn't exist
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			fmt.Printf("Can't copy file/directory:'%v'... Doesn't exist!\n", file)
+			break
+		}
+
 		destFile := strings.Replace(file, srcDir, "", 1)
 		err = utility.Copy(file, filepath.Join(pluginPath, destFile), true, c.GlobalBool(config.FLAG_VERBOSE))
 		if err != nil {
 			fmt.Printf("Error copying %v: %v\n", file, err.Error())
 			return nil
+		}
+
+		if runGoCMS {
+			utility.StartGoCMS(destDir, gocmsBinaryCommand)
 		}
 	}
 
