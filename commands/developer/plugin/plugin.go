@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 )
 
 const plugin_name = "name"
@@ -27,6 +29,19 @@ const flag_run_gocms = "run"
 const flag_run_gocms_short = "r"
 const flag_gocms_dev_mode = "gocms"
 const flag_gocms_dev_mode_short = "g"
+
+type pluginWatcherContext struct {
+	filesToCopy          []string
+	pluginPath           string
+	pluginBinaryPath     string
+	srcDir               string
+	destDir              string
+	entryPoint           string
+	goCMSDevelopmentMode bool
+	verbose              bool
+	doneChan             chan bool
+	goBuildExec          *exec.Cmd
+}
 
 var CMD_PLUGIN = cli.Command{
 	Name:      "plugin",
@@ -137,7 +152,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 		return nil
 	}
 
-	// build go binary
+	// build go binary exce
 	contentPath := filepath.Join(destDir, config.CONTENT_DIR, config.PLUGINS_DIR)
 	pluginPath := filepath.Join(contentPath, pluginName)
 	pluginBinaryPath := filepath.Join(pluginPath, binaryName)
@@ -147,57 +162,95 @@ func cmd_copy_plugin(c *cli.Context) error {
 	}
 	goBuild.Stderr = os.Stderr
 
-	err = goBuild.Run()
-	if err != nil {
-		fmt.Printf("Error running 'go build -o %v %v': %v\n", pluginBinaryPath, filepath.Join(srcDir, entryPoint), err.Error())
-		return nil
+	done := make(chan bool)
+
+	pc := pluginWatcherContext{
+		srcDir:               srcDir,
+		filesToCopy:          filesToCopy,
+		pluginPath:           pluginPath,
+		pluginBinaryPath:     pluginBinaryPath,
+		verbose:              c.GlobalBool(config.FLAG_VERBOSE),
+		goCMSDevelopmentMode: goCMSDevMode,
+		destDir:              destDir,
+		doneChan:             done,
+		goBuildExec:          goBuild,
+		entryPoint:           entryPoint,
 	}
-	// set permissions to run
-	err = os.Chmod(pluginBinaryPath, os.FileMode(0755))
+
+	err = pc.buildPluginBinary()
 	if err != nil {
-		fmt.Printf("Error setting plugin to executable: %v\n", err.Error())
+		return nil
 	}
 
 	if c.StringSlice(flag_dir_file_to_copy) != nil {
 		filesToCopy = append(filesToCopy, c.StringSlice(flag_dir_file_to_copy)...)
 	}
 
-	done := make(chan bool)
-
-	copyPluginFiles(filesToCopy, pluginPath, srcDir, c.GlobalBool(config.FLAG_VERBOSE))
+	pc.copyPluginFiles()
 
 	if watch {
 		wfc := utility.WatchFileContext{
-			Verbose:     c.GlobalBool(config.FLAG_VERBOSE),
-			SourceBase:  srcDir,
-			IgnorePaths: []string{"vendor", ".git", "docs"},
-			Chmod:       buildCopyAndRun,
-			Removed:     buildCopyAndRun,
-			Create:      buildCopyAndRun,
-			Rename:      buildCopyAndRun,
-			Write:       buildCopyAndRun,
+			Verbose:          c.GlobalBool(config.FLAG_VERBOSE),
+			SourceBase:       srcDir,
+			DoneChan:         done,
+			IgnorePaths:      []string{"vendor", ".git", "docs", ".idea", "___*"},
+			ChangeTimeoutMap: make(map[string]time.Time),
+			Chmod:            utility.IgnoreDestination,
+			Removed:          pc.buildCopyAndRun,
+			Create:           pc.buildCopyAndRun,
+			Rename:           utility.IgnoreDestination,
+			Write:            pc.buildCopyAndRun,
 		}
 
-		wfc.Watch()
+		go wfc.Watch()
 	}
 
 	if runGoCMS {
-
-		fmt.Printf("Running GoCMS\n")
-		utility.StartGoCMS(destDir, goCMSDevMode)
+		//go pc.runGoCMS()
 		<-done
+	}
+
+	if runGoCMS || watch {
+		//<-done
 	}
 
 	return nil
 }
 
-func buildCopyAndRun(c *utility.WatchFileContext, eventPath string) {
-	fmt.Printf("buildCopyAndRun called by file: %v\n", eventPath)
+func (pc *pluginWatcherContext) runGoCMS() {
+	fmt.Printf("Running GoCMS\n")
+	utility.StartGoCMS(pc.destDir, pc.goCMSDevelopmentMode)
 }
 
-func copyPluginFiles(filesToCopy []string, pluginPath string, srcDir string, verbose bool) {
+func (pc *pluginWatcherContext) buildCopyAndRun(c *utility.WatchFileContext, eventPath string) {
+
+	for _, ignorePath := range c.IgnorePaths {
+		ignorePathRegex, _ := regexp.Compile(ignorePath)
+		if ignorePathRegex.MatchString(filepath.Clean(eventPath)) {
+			return
+		}
+	}
+
+	currentTime := time.Now()
+	fileChangedLastTime := c.ChangeTimeoutMap[eventPath]
+
+	// if file change is to soon
+	if currentTime.Sub(fileChangedLastTime) < (time.Second * 1) {
+		return
+	}
+	// probably need to copy, assign, then save
+	c.ChangeTimeoutMap[eventPath] = currentTime
+	fmt.Printf("Changes Dectected. Rebuilding Plugin & Restarting GoCMS\n")
+	close(pc.doneChan)
+
+	// if changes are in path of copy files copy and restart
+	//pc.copyPluginFiles()
+
+}
+
+func (pc *pluginWatcherContext) copyPluginFiles() {
 	// copy files to plugin
-	for _, file := range filesToCopy {
+	for _, file := range pc.filesToCopy {
 
 		// if file doesn't exist
 		if _, err := os.Stat(file); os.IsNotExist(err) {
@@ -209,12 +262,27 @@ func copyPluginFiles(filesToCopy []string, pluginPath string, srcDir string, ver
 
 		// strip leading path if it isn't just a file
 		if filepath.Base(file) != file {
-			destFile = strings.Replace(file, srcDir, "", 1)
+			destFile = strings.Replace(file, pc.srcDir, "", 1)
 		}
-		destFilePath := filepath.Join(pluginPath, destFile)
-		err := utility.Copy(file, destFilePath, true, verbose)
+		destFilePath := filepath.Join(pc.pluginPath, destFile)
+		err := utility.Copy(file, destFilePath, true, pc.verbose)
 		if err != nil {
 			fmt.Printf("Error copying %v: %v\n", file, err.Error())
 		}
 	}
+}
+
+func (pc *pluginWatcherContext) buildPluginBinary() error {
+	err := pc.goBuildExec.Run()
+	if err != nil {
+		fmt.Printf("Error running 'go build -o %v %v': %v\n", pc.pluginBinaryPath, filepath.Join(pc.srcDir, pc.entryPoint), err.Error())
+		return err
+	}
+	// set permissions to run
+	err = os.Chmod(pc.pluginBinaryPath, os.FileMode(0755))
+	if err != nil {
+		fmt.Printf("Error setting plugin to executable: %v\n", err.Error())
+		return err
+	}
+	return nil
 }
