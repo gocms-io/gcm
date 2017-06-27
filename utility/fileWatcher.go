@@ -145,6 +145,7 @@ func (c *WatchFileContext) Watch() {
 		return nil
 	})
 
+	fmt.Printf("Filewatcher Started. Waiting for changes:\n")
 	<-c.DoneChan
-	fmt.Println("Stopping file watch")
+	fmt.Printf("Filewatcher Stopped.\n")
 }

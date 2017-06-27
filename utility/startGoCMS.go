@@ -9,14 +9,7 @@ import (
 )
 
 // start goCMS
-func StartGoCMS(destDir string, goCMSDevMode bool) {
-
-	// change directory into gocms dir and run from that context
-	err := os.Chdir(destDir)
-	if err != nil {
-		fmt.Printf("Error changing directory to %v: %v\n", destDir, err.Error())
-		os.Exit(0)
-	}
+func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 
 	// build command
 
@@ -26,6 +19,8 @@ func StartGoCMS(destDir string, goCMSDevMode bool) {
 	} else {
 		cmd = exec.Command(config_os.BINARY_FILE)
 	}
+
+	cmd.Dir = destDir
 
 	// set stdout to pipe
 	cmdStdoutReader, err := cmd.StdoutPipe()
@@ -61,5 +56,13 @@ func StartGoCMS(destDir string, goCMSDevMode bool) {
 	if err != nil {
 		fmt.Printf("Error starting gocms: %v\n", err.Error())
 		os.Exit(0)
+	}
+
+	fmt.Printf("GoCMS Started\n")
+
+	select {
+	case <-doneChan:
+		fmt.Printf("GoCMS Stopped.\n")
+		cmd.Process.Kill()
 	}
 }

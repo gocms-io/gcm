@@ -46,7 +46,9 @@ type pluginContext struct {
 	srcDir             string
 	destDir            string
 	verbose            bool
-	doneChan           chan bool
+	goCMSDoneChan      chan bool
+	watcherDoneChan    chan bool
+	systemDoneChan     chan bool
 	ignorePath         []string
 	goBuildExec        *exec.Cmd
 	watcherFileContext *utility.WatchFileContext
@@ -131,19 +133,22 @@ func cmd_copy_plugin(c *cli.Context) error {
 	fmt.Printf("Build and Copy Complete - %v\n", time.Now().Format("03:04:05"))
 
 	if pctx.run || pctx.watch {
-		pctx.doneChan = make(chan bool)
-
+		pctx.systemDoneChan = make(chan bool)
 		if pctx.run {
-			go pctx.runGoCMS()
+			pctx.goCMSDoneChan = make(chan bool)
+			pctx.runGoCMS()
 		}
 
 		// if watch create watcher context and run
 		if pctx.watch {
+
+			pctx.watcherDoneChan = make(chan bool)
+
 			pctx.watcherFileContext = &utility.WatchFileContext{
 				Verbose:          pctx.verbose,
 				SourceBase:       pctx.srcDir,
 				IgnorePaths:      pctx.ignorePath,
-				DoneChan:         pctx.doneChan,
+				DoneChan:         pctx.watcherDoneChan,
 				ChangeTimeoutMap: make(map[string]time.Time),
 				Chmod:            utility.IgnoreDestination,
 				Removed:          pctx.onFileChangeHandler,
@@ -151,20 +156,24 @@ func cmd_copy_plugin(c *cli.Context) error {
 				Rename:           utility.IgnoreDestination,
 				Write:            pctx.onFileChangeHandler,
 			}
-			if pctx.devMode {
-				fmt.Printf("Dev mode enabled. Waiting 5 seconds before watching files for change.\n")
-				time.Sleep(time.Second * 5)
-			}
-			go pctx.watcherFileContext.Watch()
-			if !pctx.run {
-				fmt.Print("Waiting for changes:\n")
-			}
+
+			pctx.startFileWatcher()
 		}
 
-		<-pctx.doneChan
+		// listen
+		<-pctx.systemDoneChan
 	}
 
 	return nil
+}
+
+func (pctx *pluginContext) startFileWatcher() {
+
+	if pctx.devMode {
+		fmt.Printf("Dev mode enabled. Waiting 5 seconds before watching files for change.\n")
+		time.Sleep(time.Second * 5)
+	}
+	go pctx.watcherFileContext.Watch()
 }
 
 func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, eventPath string) {
@@ -214,14 +223,23 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 
 	// if we are suppose to run the new binary within gocms
 	if pctx.run {
-		fmt.Println("rerun reached")
-		// close chanel so we can start a new one
-		close(pctx.doneChan)
-		pctx.doneChan = make(chan bool)
-		go pctx.runGoCMS()
+		fmt.Println("restart reached")
+
+		// stop the current gocms binary and start new
+		close(pctx.goCMSDoneChan)
+		newGoCMSDonChan := make(chan bool)
+		pctx.goCMSDoneChan = newGoCMSDonChan
+		pctx.runGoCMS()
+
+		// stop the current file watcher and start new
+		close(pctx.watcherDoneChan)
+		newWatcherDoneChan := make(chan bool)
+		pctx.watcherDoneChan = newWatcherDoneChan
+		pctx.watcherFileContext.DoneChan = pctx.watcherDoneChan
+		pctx.startFileWatcher()
+
 	} else {
 		fmt.Printf("Rebuild & Copy Complete - %v\n", time.Now().Format("03:04:05"))
-		fmt.Print("Waiting for changes:\n")
 	}
 
 }
@@ -271,7 +289,7 @@ func (pctx *pluginContext) runBinaryBuildCommand() error {
 
 func (pctx *pluginContext) runGoCMS() {
 	fmt.Printf("Running GoCMS\n")
-	utility.StartGoCMS(pctx.destDir, pctx.devMode)
+	go utility.StartGoCMS(pctx.destDir, pctx.devMode, pctx.goCMSDoneChan)
 }
 
 func (pctx *pluginContext) getBinaryBuildCommand() error {
