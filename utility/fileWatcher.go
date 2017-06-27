@@ -146,4 +146,5 @@ func (c *WatchFileContext) Watch() {
 	})
 
 	<-c.DoneChan
+	fmt.Println("Stopping file watch")
 }
