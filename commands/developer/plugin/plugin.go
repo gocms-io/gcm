@@ -217,8 +217,10 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 
 	fmt.Printf("Changes Dectected in '%v'\n", eventPath)
 
-	fmt.Printf("Stopping GoCMS\n")
-	close(pctx.goCMSDoneChan)
+	if pctx.run {
+		fmt.Printf("Stopping GoCMS\n")
+		close(pctx.goCMSDoneChan)
+	}
 
 	fmt.Printf("Start Rebuild & Copy - %v\n", time.Now().Format("03:04:05"))
 

@@ -70,7 +70,6 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 
 	select {
 	case <-doneChan:
-		//cmd.Process.Kill()
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 }
