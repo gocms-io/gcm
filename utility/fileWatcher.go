@@ -101,8 +101,6 @@ func (c *WatchFileContext) Watch() {
 						c.Chmod(c, event.Name)
 					}
 				}
-			case err := <-watcher.Errors:
-				log.Println("error:", err)
 			}
 		}
 	}()

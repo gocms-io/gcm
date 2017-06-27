@@ -6,21 +6,31 @@ import (
 	"github.com/gocms-io/gcm/config/config_os"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"syscall"
 )
 
 // start goCMS
 func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 
-	// build command
-
-	var cmd *exec.Cmd
+	// if dev mode first build gocms
 	if goCMSDevMode {
-		cmd = exec.Command("go", "run", "main.go")
-	} else {
-		cmd = exec.Command(config_os.BINARY_FILE)
+		// guild gocms first
+		goCMSBuildCMD := exec.Command("go", "build", "-o", config_os.BINARY_FILE, "main.go")
+		goCMSBuildCMD.Dir = destDir
+		out, err := goCMSBuildCMD.CombinedOutput()
+		if err != nil {
+			fmt.Printf("Error building gocms: %v\n", err.Error())
+		}
+		fmt.Printf("GOCMS Build Output: %v\n ", out)
 	}
 
+	// build command
+	var cmd *exec.Cmd
+	commandString := filepath.FromSlash("./" + config_os.BINARY_FILE)
+	cmd = exec.Command(commandString)
 	cmd.Dir = destDir
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// set stdout to pipe
 	cmdStdoutReader, err := cmd.StdoutPipe()
@@ -58,11 +68,9 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 		os.Exit(0)
 	}
 
-	fmt.Printf("GoCMS Started\n")
-
 	select {
 	case <-doneChan:
-		fmt.Printf("GoCMS Stopped.\n")
-		cmd.Process.Kill()
+		//cmd.Process.Kill()
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 }

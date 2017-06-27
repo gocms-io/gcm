@@ -8,9 +8,11 @@ import (
 	"github.com/urfave/cli"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -135,6 +137,18 @@ func cmd_copy_plugin(c *cli.Context) error {
 	if pctx.run || pctx.watch {
 		pctx.systemDoneChan = make(chan bool)
 		if pctx.run {
+
+			// setup gracful close to prevent port leaks
+			c := make(chan os.Signal, 2)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+			go func() {
+				<-c
+				fmt.Printf("Quiting...\n")
+				close(pctx.goCMSDoneChan)
+				time.Sleep(time.Second * 2)
+				close(pctx.systemDoneChan)
+			}()
+
 			pctx.goCMSDoneChan = make(chan bool)
 			pctx.runGoCMS()
 		}
@@ -143,19 +157,6 @@ func cmd_copy_plugin(c *cli.Context) error {
 		if pctx.watch {
 
 			pctx.watcherDoneChan = make(chan bool)
-
-			pctx.watcherFileContext = &utility.WatchFileContext{
-				Verbose:          pctx.verbose,
-				SourceBase:       pctx.srcDir,
-				IgnorePaths:      pctx.ignorePath,
-				DoneChan:         pctx.watcherDoneChan,
-				ChangeTimeoutMap: make(map[string]time.Time),
-				Chmod:            utility.IgnoreDestination,
-				Removed:          pctx.onFileChangeHandler,
-				Create:           pctx.onFileChangeHandler,
-				Rename:           utility.IgnoreDestination,
-				Write:            pctx.onFileChangeHandler,
-			}
 
 			pctx.startFileWatcher()
 		}
@@ -169,6 +170,19 @@ func cmd_copy_plugin(c *cli.Context) error {
 
 func (pctx *pluginContext) startFileWatcher() {
 
+	pctx.watcherFileContext = &utility.WatchFileContext{
+		Verbose:          pctx.verbose,
+		SourceBase:       pctx.srcDir,
+		IgnorePaths:      pctx.ignorePath,
+		DoneChan:         pctx.watcherDoneChan,
+		ChangeTimeoutMap: make(map[string]time.Time),
+		Chmod:            utility.IgnoreDestination,
+		Removed:          pctx.onFileChangeHandler,
+		Create:           pctx.onFileChangeHandler,
+		Rename:           utility.IgnoreDestination,
+		Write:            pctx.onFileChangeHandler,
+	}
+
 	if pctx.devMode {
 		fmt.Printf("Dev mode enabled. Waiting 5 seconds before watching files for change.\n")
 		time.Sleep(time.Second * 5)
@@ -177,6 +191,11 @@ func (pctx *pluginContext) startFileWatcher() {
 }
 
 func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, eventPath string) {
+
+	// ignore changes to "."
+	if eventPath == "." || eventPath == "/" || eventPath == "./" || eventPath == "" {
+		return
+	}
 
 	// ignore paths as specified
 	for _, ignorePath := range c.IgnorePaths {
@@ -189,14 +208,19 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	// check if file change is to soon and skip if needed
 	currentTime := time.Now()
 	fileChangedLastTime := c.ChangeTimeoutMap[eventPath]
-	if currentTime.Sub(fileChangedLastTime) < (time.Second * 1) {
+	if currentTime.Sub(fileChangedLastTime) < (time.Second * 5) {
 		return
 	}
 
 	// set file change time
 	c.ChangeTimeoutMap[eventPath] = currentTime
 
-	fmt.Printf("Changes Dectected. Rebuilding Plugin - %v\n", time.Now().Format("03:04:05"))
+	fmt.Printf("Changes Dectected in '%v'\n", eventPath)
+
+	fmt.Printf("Stopping GoCMS\n")
+	close(pctx.goCMSDoneChan)
+
+	fmt.Printf("Start Rebuild & Copy - %v\n", time.Now().Format("03:04:05"))
 
 	// get binary build command
 	err := pctx.getBinaryBuildCommand()
@@ -223,21 +247,9 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 
 	// if we are suppose to run the new binary within gocms
 	if pctx.run {
-		fmt.Println("restart reached")
-
-		// stop the current gocms binary and start new
-		close(pctx.goCMSDoneChan)
 		newGoCMSDonChan := make(chan bool)
 		pctx.goCMSDoneChan = newGoCMSDonChan
 		pctx.runGoCMS()
-
-		// stop the current file watcher and start new
-		close(pctx.watcherDoneChan)
-		newWatcherDoneChan := make(chan bool)
-		pctx.watcherDoneChan = newWatcherDoneChan
-		pctx.watcherFileContext.DoneChan = pctx.watcherDoneChan
-		pctx.startFileWatcher()
-
 	} else {
 		fmt.Printf("Rebuild & Copy Complete - %v\n", time.Now().Format("03:04:05"))
 	}
