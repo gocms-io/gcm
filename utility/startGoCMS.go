@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
+	"github.com/gocms-io/gcm/utility/utility_os"
 )
 
 // start goCMS
@@ -30,7 +30,9 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 	commandString := filepath.FromSlash("./" + config_os.BINARY_FILE)
 	cmd = exec.Command(commandString)
 	cmd.Dir = destDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// set process group
+	utility_os.SetChildProcessGroup(cmd)
+
 
 	// set stdout to pipe
 	cmdStdoutReader, err := cmd.StdoutPipe()
@@ -70,6 +72,6 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 
 	select {
 	case <-doneChan:
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		utility_os.Kill_process(cmd)
 	}
 }
