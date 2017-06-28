@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -12,9 +13,10 @@ type CopyContext struct {
 	Source      string
 	Destination string
 	Verbose     bool
+	Ignore      []string
 }
 
-func Copy(source string, dest string, hardCopy bool, verbose bool) error {
+func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...string) error {
 	// clean
 	source = filepath.Clean(source)
 	dest = filepath.Clean(dest)
@@ -29,7 +31,8 @@ func Copy(source string, dest string, hardCopy bool, verbose bool) error {
 
 	// if source is a directory start copy
 	if srcInfo.IsDir() {
-		err = copyDir(source, dest, hardCopy, verbose)
+
+		err = copyDir(source, dest, hardCopy, verbose, ignore...)
 		if err != nil {
 			fmt.Printf(" failed!\nerror: %v\n", err.Error())
 			return err
@@ -57,12 +60,13 @@ func Copy(source string, dest string, hardCopy bool, verbose bool) error {
 	return nil
 }
 
-func copyDir(source string, dest string, hardCopy bool, verbose bool) error {
+func copyDir(source string, dest string, hardCopy bool, verbose bool, ignore ...string) error {
 
 	cc := CopyContext{
 		Source:      source,
 		Destination: dest,
 		Verbose:     verbose,
+		Ignore:      ignore,
 	}
 
 	// if we are trying to copy a directory into a file - fix it
@@ -96,8 +100,24 @@ func (cc *CopyContext) copyDirWalk(src string, info os.FileInfo, err error) erro
 		return err
 	}
 
+	for _, ignoreFile := range cc.Ignore {
+
+		ignoreRegex, err := regexp.Compile(ignoreFile)
+		if err != nil {
+			fmt.Printf("Can't compile ignore regex %v: %v\n", ignoreFile, err.Error())
+			return nil
+		}
+		if ignoreRegex.MatchString(src) {
+			if cc.Verbose {
+				fmt.Printf("ignoring regex %v and file: %v\n", ignoreRegex, src)
+			}
+			return nil
+		}
+	}
+
 	// if dir that doesn't exist create it
 	if info.IsDir() {
+
 		err = os.MkdirAll(dst, os.ModePerm)
 		if err != nil {
 			return err
