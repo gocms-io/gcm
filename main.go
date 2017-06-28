@@ -4,6 +4,7 @@ import (
 	"github.com/gocms-io/gcm/commands/developer"
 	"github.com/gocms-io/gcm/commands/install"
 	"github.com/gocms-io/gcm/commands/update"
+	"github.com/gocms-io/gcm/commands/versions"
 	"github.com/gocms-io/gcm/config"
 	cli "github.com/urfave/cli"
 	"os"
@@ -21,12 +22,17 @@ func main() {
 		developer.CMD_DEVELOPER,
 		install.CMD_INSTALL,
 		update.CMD_UPDATE,
+		versions.CMD_VERSIONS,
 	}
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  config.FLAG_VERBOSE,
 			Usage: "Enable verbose output.",
+		},
+		cli.StringFlag{
+			Name:  config.FLAG_SET_VERSION,
+			Usage: "Set the version to use for updates or install. Defaults to current.",
 		},
 	}
 

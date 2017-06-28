@@ -4,6 +4,7 @@ import "github.com/gocms-io/gcm/config/config_os"
 
 // global flags
 const FLAG_VERBOSE = "verbose"
+const FLAG_SET_VERSION = "useVersion"
 
 // binary items
 const BINARY_PROTOCOL = "http"

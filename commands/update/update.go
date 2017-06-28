@@ -18,18 +18,14 @@ var CMD_UPDATE = cli.Command{
 }
 
 type updatePluginContext struct {
-	backupDir  string
-	stagingDir string
-	installDir string
-	verbose    bool
+	backupDir    string
+	stagingDir   string
+	installDir   string
+	versionToUse string
+	verbose      bool
 }
 
 func cmd_update(c *cli.Context) error {
-
-	//if !c.Args().Present() {
-	//	fmt.Println("An install directory must be specified.")
-	//	return nil
-	//}
 
 	installDir, _ := filepath.Abs(".")
 
@@ -39,11 +35,17 @@ func cmd_update(c *cli.Context) error {
 		return nil
 	}
 
+	versionToUse := config.BINARY_DEFAULT_VERSION
+	if c.GlobalString(config.FLAG_SET_VERSION) != "" {
+		versionToUse = c.GlobalString(config.FLAG_SET_VERSION)
+	}
+
 	uctx := updatePluginContext{
-		backupDir:  filepath.Join(installDir, config.BACKUP_DIR),
-		stagingDir: filepath.Join(installDir, config.STAGING_DIR),
-		installDir: installDir,
-		verbose:    c.GlobalBool(config.FLAG_VERBOSE),
+		backupDir:    filepath.Join(installDir, config.BACKUP_DIR),
+		stagingDir:   filepath.Join(installDir, config.STAGING_DIR),
+		installDir:   installDir,
+		verbose:      c.GlobalBool(config.FLAG_VERBOSE),
+		versionToUse: versionToUse,
 	}
 
 	// copy current install to backup
@@ -60,17 +62,17 @@ func cmd_update(c *cli.Context) error {
 	}
 
 	// do basic install and rollback on error
-	err = install.BasicInstall(uctx.stagingDir)
+	err = install.BasicInstall(uctx.stagingDir, uctx.versionToUse)
 	if err != nil {
 		// roll back update
-		fmt.Print("Rolling back changes...")
+		fmt.Print("Rolling back changes...\n")
 		os.RemoveAll(uctx.backupDir)
-		os.RemoveAll(uctx.installDir)
+		os.RemoveAll(uctx.stagingDir)
 		return nil
 	}
 
 	// merge backup and staging into installation dir
-	fmt.Print("Applying update to staging...")
+	fmt.Print("Applying update to staging...\n")
 
 	// .env
 	err = os.Rename(filepath.Join(uctx.backupDir, config.ENV_FILE), filepath.Join(uctx.stagingDir, config.ENV_FILE))
@@ -124,7 +126,7 @@ func cmd_update(c *cli.Context) error {
 }
 
 func (uctx *updatePluginContext) rollback() {
-	fmt.Print("Rolling back changes...")
+	fmt.Print("Rolling back changes...\n")
 	err := utility.Copy(uctx.backupDir, uctx.installDir, false, uctx.verbose)
 	if err != nil {
 		fmt.Printf("Error moving backup into production: %v\n", err.Error())
@@ -137,5 +139,5 @@ func (uctx *updatePluginContext) rollback() {
 	if err != nil {
 		fmt.Printf("Error removing staging: %v\n", err.Error())
 	}
-	fmt.Print("complete!\n")
+	fmt.Print("Complete!\n")
 }

@@ -21,7 +21,9 @@ func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...str
 	source = filepath.Clean(source)
 	dest = filepath.Clean(dest)
 
-	fmt.Printf("Starting to Copy: %v to %v...", source, dest)
+	if verbose {
+		fmt.Printf("Starting to Copy: %v to %v...", source, dest)
+	}
 
 	// check source
 	srcInfo, err := os.Stat(source)
@@ -38,7 +40,9 @@ func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...str
 			return err
 		}
 
-		fmt.Printf(" done.\n")
+		if verbose {
+			fmt.Printf(" done.\n")
+		}
 		return nil
 	}
 
@@ -55,7 +59,9 @@ func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...str
 		return err
 	}
 
-	fmt.Printf(" done.\n")
+	if verbose {
+		fmt.Printf(" done.\n")
+	}
 
 	return nil
 }
