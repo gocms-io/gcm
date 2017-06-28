@@ -1,6 +1,7 @@
 package versions
 
 import (
+	"fmt"
 	"github.com/urfave/cli"
 	"io"
 	"log"
@@ -26,6 +27,8 @@ func cmd_versions(c *cli.Context) error {
 			log.Fatal(err)
 		}
 	}
+
+	fmt.Println("")
 
 	return nil
 }
