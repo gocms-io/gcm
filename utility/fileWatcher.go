@@ -6,36 +6,43 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"time"
 )
 
 type WatchFileContext struct {
-	Verbose         bool
-	SourceBase      string
-	DestinationBase string
-	Chmod           func(c *WatchFileContext, eventPath string)
-	Removed         func(c *WatchFileContext, eventPath string)
-	Create          func(c *WatchFileContext, eventPath string)
-	Rename          func(c *WatchFileContext, eventPath string)
-	Write           func(c *WatchFileContext, eventPath string)
+	Verbose          bool
+	SourceBase       string
+	DestinationBase  string
+	IgnorePaths      []string
+	DoneChan         chan bool
+	ChangeTimeoutMap map[string]time.Time
+	Chmod            func(c *WatchFileContext, eventPath string)
+	Removed          func(c *WatchFileContext, eventPath string)
+	Create           func(c *WatchFileContext, eventPath string)
+	Rename           func(c *WatchFileContext, eventPath string)
+	Write            func(c *WatchFileContext, eventPath string)
 }
 
-func WatchFilesForCarbonCopy(src string, dest string, verbose bool) {
+func WatchFilesForCarbonCopy(src string, dest string, ignore []string, verbose bool) {
 	wf := WatchFileContext{
-		Verbose:         verbose,
-		SourceBase:      src,
-		DestinationBase: dest,
-		Rename:          deleteDestination,
-		Removed:         deleteDestination,
-		Create:          copySourceToDestination,
-		Write:           copySourceToDestination,
-		Chmod:           ignoreDestination,
+		Verbose:          verbose,
+		SourceBase:       src,
+		DestinationBase:  dest,
+		IgnorePaths:      ignore,
+		ChangeTimeoutMap: make(map[string]time.Time),
+		Rename:           deleteDestination,
+		Removed:          deleteDestination,
+		Create:           copySourceToDestination,
+		Write:            copySourceToDestination,
+		Chmod:            IgnoreDestination,
 	}
 
-	watch(&wf)
+	wf.Watch()
 
 }
 
-func ignoreDestination(c *WatchFileContext, eventPath string) {
+func IgnoreDestination(c *WatchFileContext, eventPath string) {
 }
 
 func deleteDestination(c *WatchFileContext, eventPath string) {
@@ -69,14 +76,13 @@ func copySourceToDestination(c *WatchFileContext, eventPath string) {
 	}
 }
 
-func watch(c *WatchFileContext) {
+func (c *WatchFileContext) Watch() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer watcher.Close()
 
-	done := make(chan bool)
 	go func() {
 		for {
 			select {
@@ -95,14 +101,31 @@ func watch(c *WatchFileContext) {
 						c.Chmod(c, event.Name)
 					}
 				}
-			case err := <-watcher.Errors:
-				log.Println("error:", err)
 			}
 		}
 	}()
 
 	// get all paths under path
 	err = filepath.Walk(c.SourceBase, func(path string, info os.FileInfo, err error) error {
+
+		// check ignore
+		for _, ignorePath := range c.IgnorePaths {
+			regexIgnorePath, _ := regexp.Compile(ignorePath)
+			//cleanIgnorePath := filepath.Clean(ignorePath)
+			cleanPath := filepath.Clean(path)
+			//fmt.Printf("Compare IP: %v, %v\n", cleanIgnorePath, cleanPath)
+			// ignore files
+			if regexIgnorePath.MatchString(cleanPath) {
+				if c.Verbose {
+					fmt.Printf("ignoring: %v\n", ignorePath)
+				}
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// ignore directories
+		}
 
 		if err != nil {
 			return err
@@ -120,5 +143,7 @@ func watch(c *WatchFileContext) {
 		return nil
 	})
 
-	<-done
+	fmt.Printf("Filewatcher Started. Waiting for changes:\n")
+	<-c.DoneChan
+	fmt.Printf("Filewatcher Stopped.\n")
 }

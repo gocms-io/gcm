@@ -59,7 +59,7 @@ func cmd_copy_theme(c *cli.Context) error {
 	themeName := c.String(theme_name)
 	themeDirPath := filepath.Join(destDir, config.CONTENT_DIR, config.THEMES_DIR, themeName)
 
-	err := utility.Copy(srcDir, themeDirPath, c.Bool(flag_hard), c.GlobalBool(config.FLAG_VERBOSE))
+	err := utility.Copy(filepath.Clean(srcDir), themeDirPath, c.Bool(flag_hard), c.GlobalBool(config.FLAG_VERBOSE))
 	if err != nil {
 		fmt.Printf("Error copying theme dir: %v\n", err.Error())
 		return nil
@@ -67,7 +67,7 @@ func cmd_copy_theme(c *cli.Context) error {
 
 	if c.Bool(flag_watch) {
 		fmt.Println("Watching source directory for changes...")
-		utility.WatchFilesForCarbonCopy(srcDir, themeDirPath, c.GlobalBool(config.FLAG_VERBOSE))
+		utility.WatchFilesForCarbonCopy(srcDir, themeDirPath, nil, c.GlobalBool(config.FLAG_VERBOSE))
 	}
 
 	return nil
