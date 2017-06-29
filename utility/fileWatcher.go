@@ -24,7 +24,7 @@ type WatchFileContext struct {
 	Write            func(c *WatchFileContext, eventPath string)
 }
 
-func WatchFilesForCarbonCopy(src string, dest string, ignore []string, verbose bool) {
+func WatchFilesForCarbonCopy(src string, dest string, verbose bool, ignore...string) {
 	wf := WatchFileContext{
 		Verbose:          verbose,
 		SourceBase:       src,
