@@ -106,13 +106,13 @@ func cmd_copy_plugin(c *cli.Context) error {
 	// get command context from cli
 	pctx, err := buildContextFromFlags(c)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// build binary
 	err = pctx.getBinaryBuildCommand()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	fmt.Printf("Starting Build and Copy - %v\n", time.Now().Format("03:04:05"))
@@ -126,7 +126,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 	// build binary
 	err = pctx.runBinaryBuildCommand()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// copy files

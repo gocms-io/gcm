@@ -83,7 +83,7 @@ func cmd_copy_theme(c *cli.Context) error {
 	err := utility.Copy(filepath.Clean(srcDir), themeDirPath, c.Bool(flag_hard), c.GlobalBool(config.FLAG_VERBOSE), ignorePath...)
 	if err != nil {
 		fmt.Printf("Error copying theme dir: %v\n", err.Error())
-		return nil
+		return err
 	}
 
 	if c.Bool(flag_watch) {
