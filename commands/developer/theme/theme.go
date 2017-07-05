@@ -87,7 +87,6 @@ func cmd_copy_theme(c *cli.Context) error {
 	}
 
 	if c.Bool(flag_watch) {
-		fmt.Println("Watching source directory for changes...")
 		utility.WatchFilesForCarbonCopy(srcDir, themeDirPath, c.GlobalBool(config.FLAG_VERBOSE), ignorePath...)
 	}
 

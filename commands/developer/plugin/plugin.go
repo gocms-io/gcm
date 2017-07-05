@@ -36,24 +36,25 @@ const flag_ignore_files = "ignore"
 const flag_ignore_files_short = "i"
 
 type pluginContext struct {
-	pluginName         string
-	hardCopy           bool
-	watch              bool
-	buildEntry         string
-	binaryName         string
-	filesToCopy        []string
-	run                bool
-	devMode            bool
-	pluginPath         string
-	srcDir             string
-	destDir            string
-	verbose            bool
-	goCMSDoneChan      chan bool
-	watcherDoneChan    chan bool
-	systemDoneChan     chan bool
-	ignorePath         []string
-	goBuildExec        *exec.Cmd
-	watcherFileContext *utility.WatchFileContext
+	pluginName                 string
+	hardCopy                   bool
+	watch                      bool
+	buildEntry                 string
+	binaryName                 string
+	filesToCopy                []string
+	run                        bool
+	devMode                    bool
+	pluginPath                 string
+	srcDir                     string
+	destDir                    string
+	verbose                    bool
+	goCMSDoneChan              chan bool
+	watcherDoneChan            chan bool
+	systemDoneChan             chan bool
+	ignorePath                 []string
+	goBuildExec                *exec.Cmd
+	watcherFileContext         *utility.WatchFileContext
+	skipRunDueToFailedComplile bool
 }
 
 var CMD_PLUGIN = cli.Command{
@@ -218,8 +219,10 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	fmt.Printf("Changes Dectected in '%v'\n", eventPath)
 
 	if pctx.run {
-		fmt.Printf("Stopping GoCMS\n")
-		close(pctx.goCMSDoneChan)
+		if !pctx.skipRunDueToFailedComplile {
+			fmt.Printf("Stopping GoCMS\n")
+			close(pctx.goCMSDoneChan)
+		}
 	}
 
 	fmt.Printf("Start Rebuild & Copy - %v\n", time.Now().Format("03:04:05"))
@@ -240,6 +243,8 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	err = pctx.runBinaryBuildCommand()
 	if err != nil {
 		fmt.Printf("Error running new binary build command: %v\n", err.Error())
+		pctx.skipRunDueToFailedComplile = true
+		return
 	}
 
 	err = pctx.copyPluginFiles()
@@ -248,6 +253,7 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	}
 
 	// if we are suppose to run the new binary within gocms
+	pctx.skipRunDueToFailedComplile = false
 	if pctx.run {
 		newGoCMSDonChan := make(chan bool)
 		pctx.goCMSDoneChan = newGoCMSDonChan
