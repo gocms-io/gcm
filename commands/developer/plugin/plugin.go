@@ -395,7 +395,11 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 
 	// add default files
 	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_MANIFEST))
-	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_DOCS))
+
+	// add docs if they exist
+	if pctx.manifest.Services.Docs != "" {
+		pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, pctx.manifest.Services.Docs))
+	}
 
 	// add additional files
 	if c.StringSlice(flag_dir_file_to_copy) != nil {

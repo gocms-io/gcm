@@ -21,7 +21,6 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 		out, err := goCMSBuildCMD.CombinedOutput()
 		fmt.Printf("GOCMS Build Output: %v\n ", string(out))
 		if err != nil {
-			fmt.Printf("Error building gocms: %v\n", err.Error())
 			return
 		}
 

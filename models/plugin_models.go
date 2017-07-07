@@ -23,6 +23,7 @@ type PluginManifestRoute struct {
 type PluginServices struct {
 	Routes []*PluginManifestRoute `json:"routes"`
 	Bin    string                 `json:"bin"`
+	Docs   string                 `json:"docs"`
 }
 type PluginInterface struct {
 	Public string `json:"public"`
