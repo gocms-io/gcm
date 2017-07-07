@@ -3,9 +3,11 @@ package plugin
 import (
 	"fmt"
 	"github.com/gocms-io/gcm/config"
+	"github.com/gocms-io/gcm/models"
 	"github.com/gocms-io/gcm/utility"
 	"github.com/gocms-io/gocms/utility/errors"
 	"github.com/urfave/cli"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,14 +18,10 @@ import (
 	"time"
 )
 
-const plugin_name = "name"
-const plugin_name_short = "n"
 const flag_hard = "delete"
 const flag_hard_short = "d"
 const flag_watch = "watch"
 const flag_watch_short = "w"
-const flag_binary = "binary"
-const flag_binary_short = "b"
 const flag_entry = "entry"
 const flag_entry_short = "e"
 const flag_dir_file_to_copy = "copy"
@@ -36,11 +34,9 @@ const flag_ignore_files = "ignore"
 const flag_ignore_files_short = "i"
 
 type pluginContext struct {
-	pluginName                 string
 	hardCopy                   bool
 	watch                      bool
 	buildEntry                 string
-	binaryName                 string
 	filesToCopy                []string
 	run                        bool
 	devMode                    bool
@@ -48,6 +44,7 @@ type pluginContext struct {
 	srcDir                     string
 	destDir                    string
 	verbose                    bool
+	manifest                   *models.PluginManifest
 	goCMSDoneChan              chan bool
 	watcherDoneChan            chan bool
 	systemDoneChan             chan bool
@@ -63,10 +60,6 @@ var CMD_PLUGIN = cli.Command{
 	ArgsUsage: "<source> <gocms installation>",
 	Action:    cmd_copy_plugin,
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  plugin_name + ", " + plugin_name_short,
-			Usage: "Name of the plugin. *Required",
-		},
 		cli.BoolFlag{
 			Name:  flag_hard + ", " + flag_hard_short,
 			Usage: "Delete the existing destination and replace with the contents of the source.",
@@ -78,10 +71,6 @@ var CMD_PLUGIN = cli.Command{
 		cli.StringFlag{
 			Name:  flag_entry + ", " + flag_entry_short,
 			Usage: "Build the plugin using the following entry point. Defaults to 'main.go'.",
-		},
-		cli.StringFlag{
-			Name:  flag_binary + ", " + flag_binary_short,
-			Usage: "Build the plugin using the following name for the output. Defaults to -n <plugin name>.",
 		},
 		cli.StringSliceFlag{
 			Name:  flag_dir_file_to_copy + ", " + flag_dir_file_to_copy_short,
@@ -277,8 +266,11 @@ func (pctx *pluginContext) copyPluginFiles() error {
 		destFile := file
 
 		// strip leading path if it isn't just a file
-		if filepath.Base(file) != file {
+		if filepath.Base(file) != file && pctx.srcDir != "." {
 			destFile = strings.Replace(file, pctx.srcDir, "", 1)
+			if pctx.verbose {
+				fmt.Printf("compaired %v and replaced %v, with %v\n", pctx.srcDir, file, destFile)
+			}
 		}
 		destFilePath := filepath.Join(pctx.pluginPath, destFile)
 		err := utility.Copy(file, destFilePath, true, pctx.verbose)
@@ -292,7 +284,7 @@ func (pctx *pluginContext) copyPluginFiles() error {
 }
 
 func (pctx *pluginContext) runBinaryBuildCommand() error {
-	fullBinPath := filepath.Join(pctx.pluginPath, pctx.binaryName)
+	fullBinPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
 	err := pctx.goBuildExec.Run()
 	if err != nil {
 		fmt.Printf("Error running 'go build -o %v %v': %v\n", fullBinPath, filepath.Join(pctx.srcDir, pctx.buildEntry), err.Error())
@@ -314,8 +306,8 @@ func (pctx *pluginContext) runGoCMS() {
 
 func (pctx *pluginContext) getBinaryBuildCommand() error {
 	// build go binary exce
-	pctx.pluginPath = filepath.Join(pctx.destDir, config.CONTENT_DIR, config.PLUGINS_DIR, pctx.pluginName)
-	pctx.goBuildExec = exec.Command("go", "build", "-o", filepath.Join(pctx.pluginPath, pctx.binaryName), filepath.Join(pctx.srcDir, pctx.buildEntry))
+	pctx.pluginPath = filepath.Join(pctx.destDir, config.CONTENT_DIR, config.PLUGINS_DIR, pctx.manifest.Id)
+	pctx.goBuildExec = exec.Command("go", "build", "-o", filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin), filepath.Join(pctx.srcDir, pctx.buildEntry))
 	//if pctx.verbose {
 	pctx.goBuildExec.Stdout = os.Stdout
 	//}
@@ -343,34 +335,37 @@ func (pctx *pluginContext) goGenerate() error {
 
 func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 
-	// verify there is a source and destination
-	if !c.Args().Present() {
+	// get src dir and dest dri
+	srcDir := c.Args().Get(0)
+	destDir := c.Args().Get(1)
+
+	// verify src and dest exist
+	if srcDir == "" || destDir == "" {
 		errStr := "A source and destination directory must be specified."
 		fmt.Println(errStr)
 		return nil, errors.New(errStr)
 	}
 
-	// verify that a plugin name is given
-	if c.String(plugin_name) == "" {
-		errStr := "A plugin name must be specified with the --name or -n flag."
-		fmt.Println(errStr)
-		return nil, errors.New(errStr)
+	// clean dirs
+	srcDir = filepath.Clean(srcDir)
+	destDir = filepath.Clean(destDir)
+
+	// parse manifest file
+	manifestPath := filepath.Join(srcDir, "manifest.json")
+	manifest, err := utility.ParseManifest(manifestPath)
+	if err != nil {
+		fmt.Printf("Error parsing manifest file %v: %v\n", manifestPath, err.Error())
+		return nil, err
 	}
 
 	pctx := pluginContext{
 		buildEntry: "main.go",
-		pluginName: c.String(plugin_name),
-		binaryName: c.String(plugin_name),
+		manifest:   manifest,
 		devMode:    false,
 		run:        false,
 		watch:      false,
-		srcDir:     c.Args().Get(0),
-		destDir:    c.Args().Get(1),
-	}
-
-	// binary
-	if c.String(flag_binary) != "" {
-		pctx.binaryName = c.String(flag_binary)
+		srcDir:     srcDir,
+		destDir:    destDir,
 	}
 
 	// entry
@@ -398,13 +393,6 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 		pctx.verbose = true
 	}
 
-	// verify src and dest exist
-	if pctx.srcDir == "" || pctx.destDir == "" {
-		errStr := "A source and destination directory must be specified."
-		fmt.Println(errStr)
-		return nil, errors.New(errStr)
-	}
-
 	// add default files
 	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_MANIFEST))
 	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_DOCS))
@@ -413,6 +401,9 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 	if c.StringSlice(flag_dir_file_to_copy) != nil {
 		pctx.filesToCopy = append(pctx.filesToCopy, c.StringSlice(flag_dir_file_to_copy)...)
 	}
+
+	// add interface files as needed
+	pctx.load_interface_for_plugin()
 
 	// add default ignore files
 	pctx.ignorePath = append(pctx.ignorePath, []string{"vendor", ".git", "docs", ".idea", "___*", "node_modules"}...)
@@ -423,4 +414,46 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 	}
 
 	return &pctx, nil
+}
+
+func (pctx *pluginContext) load_interface_for_plugin() {
+
+	// public
+	if pctx.manifest.Interface.Public != "" {
+		// if file rather than request
+		_, err := url.ParseRequestURI(pctx.manifest.Interface.Public)
+		if err != nil {
+			if pctx.verbose {
+				fmt.Printf("public interface is a file: %v. Add it for copy.\n", pctx.manifest.Interface.Public)
+			}
+			// add file
+			pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, pctx.manifest.Interface.Public))
+		} else { // skip url
+			if pctx.verbose {
+				fmt.Printf("public interface is a url: %v. Don't copy as a file.\n", pctx.manifest.Interface.Public)
+			}
+		}
+
+	}
+
+	// public vendor
+	if pctx.manifest.Interface.PublicVendor != "" {
+		// if file rather than request
+		_, err := url.ParseRequestURI(pctx.manifest.Interface.PublicVendor)
+		if err != nil {
+			if pctx.verbose {
+				fmt.Printf("public vendor interface is a file: %v. Add it for copy.\n", pctx.manifest.Interface.PublicVendor)
+			}
+			// add file
+			pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, pctx.manifest.Interface.PublicVendor))
+		} else { // skip url
+			if pctx.verbose {
+				fmt.Printf("public vendor interface is a url: %v. Don't copy as a file.\n", pctx.manifest.Interface.PublicVendor)
+			}
+		}
+
+	}
+
+	// admin goes here
+
 }

@@ -17,12 +17,13 @@ type CopyContext struct {
 }
 
 func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...string) error {
+
 	// clean
 	source = filepath.Clean(source)
 	dest = filepath.Clean(dest)
 
 	if verbose {
-		fmt.Printf("Starting to Copy: %v to %v...", source, dest)
+		fmt.Printf("Starting to Copy: %v to %v...\n", source, dest)
 	}
 
 	// check source
@@ -40,9 +41,6 @@ func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...str
 			return err
 		}
 
-		if verbose {
-			fmt.Printf(" done.\n")
-		}
 		return nil
 	}
 
@@ -57,10 +55,6 @@ func Copy(source string, dest string, hardCopy bool, verbose bool, ignore ...str
 	if err != nil {
 		fmt.Printf(" failed!\nerror: %v\n", err.Error())
 		return err
-	}
-
-	if verbose {
-		fmt.Printf(" done.\n")
 	}
 
 	return nil
