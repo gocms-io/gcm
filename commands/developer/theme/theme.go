@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gocms-io/gcm/config"
 	"github.com/gocms-io/gcm/utility"
+	"github.com/gocms-io/gocms/utility/errors"
 	"github.com/urfave/cli"
 	"path/filepath"
 )
@@ -46,15 +47,18 @@ func cmd_copy_theme(c *cli.Context) error {
 
 	// verify there is a source and destination
 	if !c.Args().Present() {
-		fmt.Println("A source and destination directory must be specified.")
-		return nil
+		err := "A source and destination directory must be specified."
+		fmt.Println(err)
+		return errors.New(err)
 	}
 
 	srcDir := c.Args().Get(0)
 	destDir := c.Args().Get(1)
 
 	if srcDir == "" || destDir == "" {
-		fmt.Println("A source and destination directory must be specified.")
+		err := "A source and destination directory must be specified."
+		fmt.Println(err)
+		return errors.New(err)
 	}
 
 	if srcDir == "." || srcDir == "./" {
@@ -63,14 +67,15 @@ func cmd_copy_theme(c *cli.Context) error {
 
 	// verify that a plugin name is given
 	if c.String(theme_name) == "" {
-		fmt.Println("A plugin name must be specified with the --name or -n flag.")
-		return nil
+		err := "A plugin name must be specified with the --name or -n flag."
+		fmt.Println(err)
+		return errors.New(err)
 	}
 
 	// ignore files
 	// add default ignore files
 	ignorePath := []string{}
-	ignorePath = append(ignorePath, []string{"vendor", ".git", "docs", ".idea", ".*___", "node_modules"}...)
+	ignorePath = append(ignorePath, []string{".git", "docs", ".idea", ".*___", "node_modules"}...)
 
 	// add files to ignore
 	if c.StringSlice(flag_ignore_files) != nil {
