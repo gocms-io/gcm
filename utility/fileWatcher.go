@@ -24,7 +24,7 @@ type WatchFileContext struct {
 	Write            func(c *WatchFileContext, eventPath string)
 }
 
-func WatchFilesForCarbonCopy(src string, dest string, verbose bool, ignore...string) {
+func WatchFilesForCarbonCopy(src string, dest string, verbose bool, ignore ...string) {
 	wf := WatchFileContext{
 		Verbose:          verbose,
 		SourceBase:       src,
@@ -73,6 +73,8 @@ func copySourceToDestination(c *WatchFileContext, eventPath string) {
 	err = Copy(eventPath, dest, true, c.Verbose)
 	if err != nil {
 		fmt.Printf("Error copying %v: %v\n", eventPath, err.Error())
+	} else {
+		fmt.Printf("Copied: %v\n", eventPath)
 	}
 }
 
