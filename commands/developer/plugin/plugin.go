@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -285,6 +286,10 @@ func (pctx *pluginContext) copyPluginFiles() error {
 
 func (pctx *pluginContext) runBinaryBuildCommand() error {
 	fullBinPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
+	if runtime.GOOS == "windows" {
+		fullBinPath = fmt.Sprintf("%v.exe", fullBinPath)
+	}
+
 	err := pctx.goBuildExec.Run()
 	if err != nil {
 		fmt.Printf("Error running 'go build -o %v %v': %v\n", fullBinPath, filepath.Join(pctx.srcDir, pctx.buildEntry), err.Error())
