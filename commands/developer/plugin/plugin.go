@@ -437,6 +437,21 @@ func (pctx *pluginContext) load_interface_for_plugin() {
 		pctx.loadFileOrUrl(pctx.manifest.Interface.PublicStyle)
 	}
 
+	// admin
+	if pctx.manifest.Interface.Admin != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.Admin)
+	}
+
+	// admin vendor
+	if pctx.manifest.Interface.AdminVendor != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminVendor)
+	}
+
+	// admin style
+	if pctx.manifest.Interface.AdminStyle != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminStyle)
+	}
+
 	// admin goes here
 
 }

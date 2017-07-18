@@ -29,4 +29,7 @@ type PluginInterface struct {
 	Public       string `json:"public"`
 	PublicVendor string `json:"publicVendor"`
 	PublicStyle  string `json:"publicStyle"`
+	Admin        string `json:"admin"`
+	AdminVendor  string `json:"adminVendor"`
+	AdminStyle   string `json:"adminStyle"`
 }
