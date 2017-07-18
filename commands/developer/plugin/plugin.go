@@ -288,7 +288,6 @@ func (pctx *pluginContext) runBinaryBuildCommand() error {
 	fullBinPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
 	if runtime.GOOS == "windows" {
 		fullBinPath = fmt.Sprintf("%v.exe", fullBinPath)
-		fmt.Printf("Adding .exe for windows: %v\n", fullBinPath)
 	}
 
 	err := pctx.goBuildExec.Run()
@@ -313,7 +312,11 @@ func (pctx *pluginContext) runGoCMS() {
 func (pctx *pluginContext) getBinaryBuildCommand() error {
 	// build go binary exce
 	pctx.pluginPath = filepath.Join(pctx.destDir, config.CONTENT_DIR, config.PLUGINS_DIR, pctx.manifest.Id)
-	pctx.goBuildExec = exec.Command("go", "build", "-o", filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin), filepath.Join(pctx.srcDir, pctx.buildEntry))
+	buildPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
+	if runtime.GOOS == "windows" {
+		buildPath = fmt.Sprintf("%v.exe", buildPath)
+	}
+	pctx.goBuildExec = exec.Command("go", "build", "-o", buildPath, filepath.Join(pctx.srcDir, pctx.buildEntry))
 	//if pctx.verbose {
 	pctx.goBuildExec.Stdout = os.Stdout
 	//}
