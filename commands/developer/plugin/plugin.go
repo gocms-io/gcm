@@ -3,27 +3,26 @@ package plugin
 import (
 	"fmt"
 	"github.com/gocms-io/gcm/config"
+	"github.com/gocms-io/gcm/models"
 	"github.com/gocms-io/gcm/utility"
 	"github.com/gocms-io/gocms/utility/errors"
 	"github.com/urfave/cli"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 )
 
-const plugin_name = "name"
-const plugin_name_short = "n"
 const flag_hard = "delete"
 const flag_hard_short = "d"
 const flag_watch = "watch"
 const flag_watch_short = "w"
-const flag_binary = "binary"
-const flag_binary_short = "b"
 const flag_entry = "entry"
 const flag_entry_short = "e"
 const flag_dir_file_to_copy = "copy"
@@ -36,24 +35,24 @@ const flag_ignore_files = "ignore"
 const flag_ignore_files_short = "i"
 
 type pluginContext struct {
-	pluginName         string
-	hardCopy           bool
-	watch              bool
-	buildEntry         string
-	binaryName         string
-	filesToCopy        []string
-	run                bool
-	devMode            bool
-	pluginPath         string
-	srcDir             string
-	destDir            string
-	verbose            bool
-	goCMSDoneChan      chan bool
-	watcherDoneChan    chan bool
-	systemDoneChan     chan bool
-	ignorePath         []string
-	goBuildExec        *exec.Cmd
-	watcherFileContext *utility.WatchFileContext
+	hardCopy                   bool
+	watch                      bool
+	buildEntry                 string
+	filesToCopy                []string
+	run                        bool
+	devMode                    bool
+	pluginPath                 string
+	srcDir                     string
+	destDir                    string
+	verbose                    bool
+	manifest                   *models.PluginManifest
+	goCMSDoneChan              chan bool
+	watcherDoneChan            chan bool
+	systemDoneChan             chan bool
+	ignorePath                 []string
+	goBuildExec                *exec.Cmd
+	watcherFileContext         *utility.WatchFileContext
+	skipRunDueToFailedComplile bool
 }
 
 var CMD_PLUGIN = cli.Command{
@@ -62,10 +61,6 @@ var CMD_PLUGIN = cli.Command{
 	ArgsUsage: "<source> <gocms installation>",
 	Action:    cmd_copy_plugin,
 	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  plugin_name + ", " + plugin_name_short,
-			Usage: "Name of the plugin. *Required",
-		},
 		cli.BoolFlag{
 			Name:  flag_hard + ", " + flag_hard_short,
 			Usage: "Delete the existing destination and replace with the contents of the source.",
@@ -78,13 +73,9 @@ var CMD_PLUGIN = cli.Command{
 			Name:  flag_entry + ", " + flag_entry_short,
 			Usage: "Build the plugin using the following entry point. Defaults to 'main.go'.",
 		},
-		cli.StringFlag{
-			Name:  flag_binary + ", " + flag_binary_short,
-			Usage: "Build the plugin using the following name for the output. Defaults to -n <plugin name>.",
-		},
 		cli.StringSliceFlag{
 			Name:  flag_dir_file_to_copy + ", " + flag_dir_file_to_copy_short,
-			Usage: "Directory or file to copy with plugin. Accepts multiple instances of the flag.",
+			Usage: "Directory or file to copy with plugin (relative to source). Accepts multiple instances of the flag.",
 		},
 		cli.BoolFlag{
 			Name:  flag_run_gocms + ", " + flag_run_gocms_short,
@@ -106,13 +97,13 @@ func cmd_copy_plugin(c *cli.Context) error {
 	// get command context from cli
 	pctx, err := buildContextFromFlags(c)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// build binary
 	err = pctx.getBinaryBuildCommand()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	fmt.Printf("Starting Build and Copy - %v\n", time.Now().Format("03:04:05"))
@@ -126,7 +117,7 @@ func cmd_copy_plugin(c *cli.Context) error {
 	// build binary
 	err = pctx.runBinaryBuildCommand()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// copy files
@@ -218,8 +209,10 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	fmt.Printf("Changes Dectected in '%v'\n", eventPath)
 
 	if pctx.run {
-		fmt.Printf("Stopping GoCMS\n")
-		close(pctx.goCMSDoneChan)
+		if !pctx.skipRunDueToFailedComplile {
+			fmt.Printf("Stopping GoCMS\n")
+			close(pctx.goCMSDoneChan)
+		}
 	}
 
 	fmt.Printf("Start Rebuild & Copy - %v\n", time.Now().Format("03:04:05"))
@@ -240,6 +233,8 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	err = pctx.runBinaryBuildCommand()
 	if err != nil {
 		fmt.Printf("Error running new binary build command: %v\n", err.Error())
+		pctx.skipRunDueToFailedComplile = true
+		return
 	}
 
 	err = pctx.copyPluginFiles()
@@ -248,6 +243,7 @@ func (pctx *pluginContext) onFileChangeHandler(c *utility.WatchFileContext, even
 	}
 
 	// if we are suppose to run the new binary within gocms
+	pctx.skipRunDueToFailedComplile = false
 	if pctx.run {
 		newGoCMSDonChan := make(chan bool)
 		pctx.goCMSDoneChan = newGoCMSDonChan
@@ -271,8 +267,11 @@ func (pctx *pluginContext) copyPluginFiles() error {
 		destFile := file
 
 		// strip leading path if it isn't just a file
-		if filepath.Base(file) != file {
+		if filepath.Base(file) != file && pctx.srcDir != "." {
 			destFile = strings.Replace(file, pctx.srcDir, "", 1)
+			if pctx.verbose {
+				fmt.Printf("compaired %v and replaced %v, with %v\n", pctx.srcDir, file, destFile)
+			}
 		}
 		destFilePath := filepath.Join(pctx.pluginPath, destFile)
 		err := utility.Copy(file, destFilePath, true, pctx.verbose)
@@ -286,7 +285,11 @@ func (pctx *pluginContext) copyPluginFiles() error {
 }
 
 func (pctx *pluginContext) runBinaryBuildCommand() error {
-	fullBinPath := filepath.Join(pctx.pluginPath, pctx.binaryName)
+	fullBinPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
+	if runtime.GOOS == "windows" {
+		fullBinPath = fmt.Sprintf("%v.exe", fullBinPath)
+	}
+
 	err := pctx.goBuildExec.Run()
 	if err != nil {
 		fmt.Printf("Error running 'go build -o %v %v': %v\n", fullBinPath, filepath.Join(pctx.srcDir, pctx.buildEntry), err.Error())
@@ -308,8 +311,12 @@ func (pctx *pluginContext) runGoCMS() {
 
 func (pctx *pluginContext) getBinaryBuildCommand() error {
 	// build go binary exce
-	pctx.pluginPath = filepath.Join(pctx.destDir, config.CONTENT_DIR, config.PLUGINS_DIR, pctx.pluginName)
-	pctx.goBuildExec = exec.Command("go", "build", "-o", filepath.Join(pctx.pluginPath, pctx.binaryName), filepath.Join(pctx.srcDir, pctx.buildEntry))
+	pctx.pluginPath = filepath.Join(pctx.destDir, config.CONTENT_DIR, config.PLUGINS_DIR, pctx.manifest.Id)
+	buildPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
+	if runtime.GOOS == "windows" {
+		buildPath = fmt.Sprintf("%v.exe", buildPath)
+	}
+	pctx.goBuildExec = exec.Command("go", "build", "-o", buildPath, filepath.Join(pctx.srcDir, pctx.buildEntry))
 	//if pctx.verbose {
 	pctx.goBuildExec.Stdout = os.Stdout
 	//}
@@ -337,34 +344,37 @@ func (pctx *pluginContext) goGenerate() error {
 
 func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 
-	// verify there is a source and destination
-	if !c.Args().Present() {
+	// get src dir and dest dri
+	srcDir := c.Args().Get(0)
+	destDir := c.Args().Get(1)
+
+	// verify src and dest exist
+	if srcDir == "" || destDir == "" {
 		errStr := "A source and destination directory must be specified."
 		fmt.Println(errStr)
 		return nil, errors.New(errStr)
 	}
 
-	// verify that a plugin name is given
-	if c.String(plugin_name) == "" {
-		errStr := "A plugin name must be specified with the --name or -n flag."
-		fmt.Println(errStr)
-		return nil, errors.New(errStr)
+	// clean dirs
+	srcDir = filepath.Clean(srcDir)
+	destDir = filepath.Clean(destDir)
+
+	// parse manifest file
+	manifestPath := filepath.Join(srcDir, "manifest.json")
+	manifest, err := utility.ParseManifest(manifestPath)
+	if err != nil {
+		fmt.Printf("Error parsing manifest file %v: %v\n", manifestPath, err.Error())
+		return nil, err
 	}
 
 	pctx := pluginContext{
 		buildEntry: "main.go",
-		pluginName: c.String(plugin_name),
-		binaryName: c.String(plugin_name),
+		manifest:   manifest,
 		devMode:    false,
 		run:        false,
 		watch:      false,
-		srcDir:     c.Args().Get(0),
-		destDir:    c.Args().Get(1),
-	}
-
-	// binary
-	if c.String(flag_binary) != "" {
-		pctx.binaryName = c.String(flag_binary)
+		srcDir:     srcDir,
+		destDir:    destDir,
 	}
 
 	// entry
@@ -392,21 +402,21 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 		pctx.verbose = true
 	}
 
-	// verify src and dest exist
-	if pctx.srcDir == "" || pctx.destDir == "" {
-		errStr := "A source and destination directory must be specified."
-		fmt.Println(errStr)
-		return nil, errors.New(errStr)
-	}
-
 	// add default files
 	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_MANIFEST))
-	pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.PLUGIN_DOCS))
+
+	// add docs if they exist
+	if pctx.manifest.Services.Docs != "" {
+		pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, pctx.manifest.Services.Docs))
+	}
 
 	// add additional files
 	if c.StringSlice(flag_dir_file_to_copy) != nil {
 		pctx.filesToCopy = append(pctx.filesToCopy, c.StringSlice(flag_dir_file_to_copy)...)
 	}
+
+	// add interface files as needed
+	pctx.load_interface_for_plugin()
 
 	// add default ignore files
 	pctx.ignorePath = append(pctx.ignorePath, []string{"vendor", ".git", "docs", ".idea", "___*", "node_modules"}...)
@@ -417,4 +427,56 @@ func buildContextFromFlags(c *cli.Context) (*pluginContext, error) {
 	}
 
 	return &pctx, nil
+}
+
+func (pctx *pluginContext) load_interface_for_plugin() {
+
+	// public
+	if pctx.manifest.Interface.Public != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.Public)
+	}
+
+	// public vendor
+	if pctx.manifest.Interface.PublicVendor != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.PublicVendor)
+	}
+
+	// public style
+	if pctx.manifest.Interface.PublicStyle != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.PublicStyle)
+	}
+
+	// admin
+	if pctx.manifest.Interface.Admin != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.Admin)
+	}
+
+	// admin vendor
+	if pctx.manifest.Interface.AdminVendor != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminVendor)
+	}
+
+	// admin style
+	if pctx.manifest.Interface.AdminStyle != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminStyle)
+	}
+
+	// admin goes here
+
+}
+
+func (pctx *pluginContext) loadFileOrUrl(path string) {
+	// if file rather than request
+	_, err := url.ParseRequestURI(path)
+	if err != nil {
+		if pctx.verbose {
+			fmt.Printf("public vendor interface is a file: %v. Add it for copy.\n", path)
+		}
+		// add file
+		pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, path))
+	} else { // skip url
+		if pctx.verbose {
+			fmt.Printf("public vendor interface is a url: %v. Don't copy as a file.\n", path)
+		}
+	}
 }

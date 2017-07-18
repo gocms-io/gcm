@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/gocms-io/gcm/config/config_os"
+	"github.com/gocms-io/gcm/utility/utility_os"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 )
 
 // start goCMS
@@ -19,10 +19,11 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 		goCMSBuildCMD := exec.Command("go", "build", "-o", config_os.BINARY_FILE, "main.go")
 		goCMSBuildCMD.Dir = destDir
 		out, err := goCMSBuildCMD.CombinedOutput()
+		fmt.Printf("GOCMS Build Output: %v\n ", string(out))
 		if err != nil {
-			fmt.Printf("Error building gocms: %v\n", err.Error())
+			return
 		}
-		fmt.Printf("GOCMS Build Output: %v\n ", out)
+
 	}
 
 	// build command
@@ -30,7 +31,8 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 	commandString := filepath.FromSlash("./" + config_os.BINARY_FILE)
 	cmd = exec.Command(commandString)
 	cmd.Dir = destDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// set process group
+	utility_os.SetChildProcessGroup(cmd)
 
 	// set stdout to pipe
 	cmdStdoutReader, err := cmd.StdoutPipe()
@@ -70,6 +72,6 @@ func StartGoCMS(destDir string, goCMSDevMode bool, doneChan chan bool) {
 
 	select {
 	case <-doneChan:
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		utility_os.Kill_process(cmd)
 	}
 }
