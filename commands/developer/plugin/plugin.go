@@ -424,40 +424,50 @@ func (pctx *pluginContext) load_interface_for_plugin() {
 
 	// public
 	if pctx.manifest.Interface.Public != "" {
-		// if file rather than request
-		_, err := url.ParseRequestURI(pctx.manifest.Interface.Public)
-		if err != nil {
-			if pctx.verbose {
-				fmt.Printf("public interface is a file: %v. Add it for copy.\n", pctx.manifest.Interface.Public)
-			}
-			// add file
-			pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, pctx.manifest.Interface.Public))
-		} else { // skip url
-			if pctx.verbose {
-				fmt.Printf("public interface is a url: %v. Don't copy as a file.\n", pctx.manifest.Interface.Public)
-			}
-		}
-
+		pctx.loadFileOrUrl(pctx.manifest.Interface.Public)
 	}
 
 	// public vendor
 	if pctx.manifest.Interface.PublicVendor != "" {
-		// if file rather than request
-		_, err := url.ParseRequestURI(pctx.manifest.Interface.PublicVendor)
-		if err != nil {
-			if pctx.verbose {
-				fmt.Printf("public vendor interface is a file: %v. Add it for copy.\n", pctx.manifest.Interface.PublicVendor)
-			}
-			// add file
-			pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, pctx.manifest.Interface.PublicVendor))
-		} else { // skip url
-			if pctx.verbose {
-				fmt.Printf("public vendor interface is a url: %v. Don't copy as a file.\n", pctx.manifest.Interface.PublicVendor)
-			}
-		}
+		pctx.loadFileOrUrl(pctx.manifest.Interface.PublicVendor)
+	}
 
+	// public style
+	if pctx.manifest.Interface.PublicStyle != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.PublicStyle)
+	}
+
+	// admin
+	if pctx.manifest.Interface.Admin != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.Admin)
+	}
+
+	// admin vendor
+	if pctx.manifest.Interface.AdminVendor != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminVendor)
+	}
+
+	// admin style
+	if pctx.manifest.Interface.AdminStyle != "" {
+		pctx.loadFileOrUrl(pctx.manifest.Interface.AdminStyle)
 	}
 
 	// admin goes here
 
+}
+
+func (pctx *pluginContext) loadFileOrUrl(path string) {
+	// if file rather than request
+	_, err := url.ParseRequestURI(path)
+	if err != nil {
+		if pctx.verbose {
+			fmt.Printf("public vendor interface is a file: %v. Add it for copy.\n", path)
+		}
+		// add file
+		pctx.filesToCopy = append(pctx.filesToCopy, filepath.Join(pctx.srcDir, config.CONTENT_DIR, path))
+	} else { // skip url
+		if pctx.verbose {
+			fmt.Printf("public vendor interface is a url: %v. Don't copy as a file.\n", path)
+		}
+	}
 }
