@@ -288,6 +288,7 @@ func (pctx *pluginContext) runBinaryBuildCommand() error {
 	fullBinPath := filepath.Join(pctx.pluginPath, pctx.manifest.Services.Bin)
 	if runtime.GOOS == "windows" {
 		fullBinPath = fmt.Sprintf("%v.exe", fullBinPath)
+		fmt.Printf("Adding .exe for windows: %v\n", fullBinPath)
 	}
 
 	err := pctx.goBuildExec.Run()
