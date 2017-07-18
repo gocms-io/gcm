@@ -75,7 +75,7 @@ var CMD_PLUGIN = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  flag_dir_file_to_copy + ", " + flag_dir_file_to_copy_short,
-			Usage: "Directory or file to copy with plugin. Accepts multiple instances of the flag.",
+			Usage: "Directory or file to copy with plugin (relative to source). Accepts multiple instances of the flag.",
 		},
 		cli.BoolFlag{
 			Name:  flag_run_gocms + ", " + flag_run_gocms_short,
